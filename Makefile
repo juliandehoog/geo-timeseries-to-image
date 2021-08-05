@@ -1,5 +1,6 @@
 deploy:
-	python setup.py sdist bdist_wheel && python -m twine upload dist/*
+	python setup.py sdist
+	twine upload dist/*
 
 local-install: local-uninstall
 	python setup.py develop --user

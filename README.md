@@ -24,8 +24,11 @@ generate a sequence of images from time series data, and convert these into a vi
 
 ## Install
 
-To install this locally, run:
+```bash
+pip install geots2img
+```
 
+Or if you prefer to install this locally (in development mode), run:
 ```bash
 git clone git@github.com:juliandehoog/geo-timeseries-to-image.git
 make local-install
