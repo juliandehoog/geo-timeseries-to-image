@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(name="geots2img",
-      version="0.1.0",
+      version="0.1.1",
       description="Geo Time Series to Image",
       url="https://github.com/juliandehoog/geo-timeseries-to-image",
       author="Julian de Hoog",

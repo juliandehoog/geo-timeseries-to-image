@@ -276,9 +276,9 @@ def generate_image_sequence(data,
             filename_base = utc_time.strftime('%Y-%m-%d_%H-%M-%S')
         elif filename_format == 'numerical':
             filename_base = '{:08d}'.format(loop_ix)
-        image_gen.save_image(save_path + filename_base + ".jpg")
+        image_gen.save_image(f"{save_path}{filename_base}.jpg")
 
-        loop_ix = loop_ix + 1
+        loop_ix += 1
 
 
 def generate_video(source_path, target_path=None, frame_rate=30):
@@ -290,5 +290,8 @@ def generate_video(source_path, target_path=None, frame_rate=30):
     """
     """  """
     if target_path is None:
-        target_path = source_path + "_video.mp4"
-    os.system(f"ffmpeg -r {frame_rate} -i {source_path}%08d.jpg -vcodec mpeg4 -y {target_path}")
+        target_path = f"{source_path}_video.mp4"
+    try:
+        os.system(f"ffmpeg -r {frame_rate} -i {source_path}%08d.jpg -vcodec mpeg4 -y {target_path}")
+    except BaseException:
+        raise RuntimeError("Could not generate video, perhaps since ffmpeg is not installed.")
