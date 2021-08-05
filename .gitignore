@@ -1,6 +1,7 @@
 # Custom
 *.DS_Store
 .idea
+examples/images
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

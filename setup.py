@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(name="geots2img",
-      version="0.0.1",
+      version="0.1.0",
       description="Geo Time Series to Image",
       url="https://github.com/juliandehoog/geo-timeseries-to-image",
       author="Julian de Hoog",
@@ -9,5 +9,12 @@ setup(name="geots2img",
       license="Apache-2.0",
       packages=find_packages(),
       install_requires=[
-            'pandas'],
+            'pandas',
+            'setuptools',
+            'numpy',
+            'matplotlib',
+            'scipy',
+            'Pillow',
+            'pytz',
+      ],
       zip_safe=False)
