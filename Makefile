@@ -1,5 +1,11 @@
-local-install:
-	sudo python3 setup.py develop
+deploy: clean
+	python setup.py sdist bdist_wheel && python -m twine upload dist/*
+
+local-install: local-uninstall
+	python setup.py develop --user
 
 local-uninstall:
-	sudo python3 setup.py develop --uninstall
+	python setup.py develop --uninstall --user
+
+clean:
+	rm -f dist/pbu-*
