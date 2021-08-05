@@ -22,6 +22,17 @@ generate a sequence of images from time series data, and convert these into a vi
 
 ---
 
+## Install
+
+To install this locally, run:
+
+```bash
+git clone git@github.com:juliandehoog/geo-timeseries-to-image.git
+make local-install
+```
+
+---
+
 ## Description
 
 The core functionality is provided within the `ImageGenerator` class.  When creating 
@@ -62,31 +73,26 @@ Any of the following:
 Consider if we have temperature time series data like this (each time series
 correponds to temperature measurements at one postcode in Western Australia):
 
-![](examples/example_data.pdf)
+![](examples/example_data.png)
 
 We can choose one interval, say 2-Nov-2020 12:00, and convert it to an image like this:
 
-![](examples/example_image_annotated.pdf)
+![](examples/example_image_annotated.png)
+
+In the figure above, green circles indicates locations of source data (where temperature was measured),
+while red circles indicate boundary points that are synthetically added to ensure that we
+can interpolate reasonably well across the whole region of interest.
 
 After converting each interval to an image, we can represent the full period of interest
 as a video, like this:
-![](examples/example_video.mp4)
+
+![](examples/example_video.gif)
 
 In this particular example (one day of temperature data), the visualisation is not that 
 interesting in the end -- although it does indicate that one postcode seems to have either 
 faulty sensors or unique characteristics. However, for other types of time series data 
 (like solar PV generation, for example), these types of visualisation can be very helpful.
 
----
-
-## Install
-
-To install this locally, run:
-
-```bash
-git clone git@github.com:juliandehoog/geo-timeseries-to-image.git
-make local-install
-```
 
 ---
 

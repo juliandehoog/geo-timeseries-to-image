@@ -281,17 +281,23 @@ def generate_image_sequence(data,
         loop_ix += 1
 
 
-def generate_video(source_path, target_path=None, frame_rate=30):
+def generate_video(source_path, target_path=None, frame_rate=30, output_format='mp4'):
     """
     Simple python wrapper for command line ffmpeg tool to generate a video of existing image sequence
     :param source_path: Where to find image sequence files (must have 8-digit numbered filenames, e.g. 00000001.jpg)
     :param target_path: Where to save the video, default "_video.mp4"
     :param frame_rate: int indicating framerate, default 30
+    :param output_format: string indicating preferred output format.  Currently only mp4 and gif supported.
     """
     """  """
-    if target_path is None:
-        target_path = f"{source_path}_video.mp4"
     try:
-        os.system(f"ffmpeg -r {frame_rate} -i {source_path}%08d.jpg -vcodec mpeg4 -y {target_path}")
+        if output_format == 'mp4':
+            if target_path is None:
+                target_path = f"{source_path}_video.mp4"
+            os.system(f"ffmpeg -r {frame_rate} -i {source_path}%08d.jpg -vcodec mpeg4 -y {target_path}")
+        elif output_format == 'gif':
+            if target_path is None:
+                target_path = f"{source_path}_video.gif"
+            os.system(f"ffmpeg -r {frame_rate} -i {source_path}%08d.jpg -f gif -y {target_path}")
     except BaseException:
         raise RuntimeError("Could not generate video, perhaps since ffmpeg is not installed.")
