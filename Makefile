@@ -1,4 +1,4 @@
-deploy: clean
+deploy:
 	python setup.py sdist bdist_wheel && python -m twine upload dist/*
 
 local-install: local-uninstall
@@ -6,6 +6,3 @@ local-install: local-uninstall
 
 local-uninstall:
 	python setup.py develop --uninstall --user
-
-clean:
-	rm -f dist/pbu-*

@@ -6,7 +6,7 @@ setup(name="geots2img",
       url="https://github.com/juliandehoog/geo-timeseries-to-image",
       author="Julian de Hoog",
       author_email='julian@dehoog.ca',
-      license="Apache-2.0",
+      license="MIT",
       packages=find_packages(),
       install_requires=[
             'pandas',
