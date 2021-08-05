@@ -1,5 +1,8 @@
-deploy:
-	python setup.py sdist
+clean:
+	rm -f dist/*
+
+deploy: clean
+	python setup.py sdist bdist_wheel
 	twine upload dist/*
 
 local-install: local-uninstall
