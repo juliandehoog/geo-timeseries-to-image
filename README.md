@@ -101,6 +101,7 @@ faulty sensors or unique characteristics. However, for other types of time serie
 
 ## Release History
 
+- **0.1.3** - Fixed minor issue with nans at edge of fitted values
 - **0.1.2** - Fixed makefile, setup, etc. for deployment to pypi
 - **0.1.1** - Multiple minor fixed, improved README, thanks to [Peter Ilfrich](https://github.com/ilfrich) 
   for the suggestions
