@@ -37,10 +37,9 @@ class ImageGenerator:
         self.image = None           # PIL Image generated using fitted_values
 
         # Create coordinate grid
-        # Note that addition of self.resolution/2 leads to proper bounds (it handles rounding issues)
         self.grid_x, self.grid_y = np.mgrid[
-                                   self.x_range[0]: self.x_range[1] + self.resolution / 2: self.resolution,
-                                   self.y_range[0]: self.y_range[1] + self.resolution / 2: self.resolution
+                                   self.x_range[0]: self.x_range[1]: self.resolution,
+                                   self.y_range[0]: self.y_range[1]: self.resolution
                                    ]
 
     def _check_points_valid(self, points):

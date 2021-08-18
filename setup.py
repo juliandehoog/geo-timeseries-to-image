@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(name="geots2img",
-      version="0.1.2",
+      version="0.1.3",
       description="Geo Time Series to Image",
       long_description=long_description,
       long_description_content_type="text/markdown",
