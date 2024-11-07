@@ -78,7 +78,7 @@ class ImageGenerator:
         # Check that there are as many values as we already have source points
         if len(source_values) != len(self.source_points):
             raise ValueError(f"There were {len(source_values)} source values provided but there are " +
-                             f"{len(self.source_points)}, these numbers must match")
+                             f"{len(self.source_points)} source points, these numbers must match")
 
         self.source_values = source_values
 
