@@ -2,39 +2,66 @@ import warnings
 import copy
 import numpy as np
 import os
-from scipy.interpolate import griddata
+from scipy.interpolate import griddata, RBFInterpolator
 import matplotlib.pyplot as plt
 from PIL import Image
 from pathlib import Path
 import pytz
 
 
+class InterpolationMethod:
+    """ Utility class to define possible interpolation methods """
+    griddata = "griddata"
+    rbf_interpolator = "RBFInterpolator"
+
+
+def valid_interpolation_methods():
+    return [InterpolationMethod.griddata, InterpolationMethod.rbf_interpolator]
+
+
 class ImageGenerator:
     """ Generates an image based on a number of individual data points """
 
-    def __init__(self, x_range, y_range, resolution):
+    def __init__(self, x_range, y_range, resolution,
+                 source_points=None, source_values=None,
+                 include_boundary_points=False,
+                 interpolation_method='RBFInterpolator'):
         """
         :param x_range:  array of [float, float] indicating min, max of x range
         :param y_range:  array of [float, float] indicating min, max of y range
         :param resolution: float indicating discretisation interval size
+        :param source_points: list of tuples (x, y) indicating point locations
+        :param source_values: list of float values at source points (must be in same order)
+        :param include_boundary_points: bool indicating whether to add boundary points, default False
+        :param interpolation_method: one of 'griddata' or 'RBFInterpolator' (default)
         """
 
-        self.x_range = x_range                  # [min, max] x values
-        self.y_range = y_range                  # [min, max] y values
-        self.resolution = resolution            # discretisation interval
+        self.x_range = x_range  # [min, max] x values
+        self.y_range = y_range  # [min, max] y values
+        self.resolution = resolution  # discretisation interval
 
-        self.source_points = []                 # list of tuples (x, y) for source points
-        self.source_values = []                 # list of values at source points (must be in same order)
+        if (source_points is not None) and (source_values is not None):
+            self.set_source_points_and_values(source_points, source_values)
+        else:
+            self.source_points = []
+            self.source_values = []
 
-        self.points_per_boundary = 5            # How many points should be generated at each boundary
-        self.boundary_points = []               # list of tuples (x, y) for boundary points
-        self.boundary_values = []               # list of values at boundary points (must be in same order)
-        self.generate_boundary_points()
+        # Whether to artificially generate boundary points to ensure full region is interpolated.
+        # Default False, can also be set to True when generating fitted points or image.
+        self.include_boundary_points = include_boundary_points
 
-        self.fitted_values = None   # 2D numpy array: values in full grid after fitting a surface
+        # Below are only relevant if boundary points do get generated
+        self.points_per_boundary = 5  # How many points should be generated at each boundary
+        self.boundary_points = []  # list of tuples (x, y) for boundary points
+        self.boundary_values = []  # list of values at boundary points (must be in same order)
 
-        self.cmap = plt.get_cmap('cividis')     # color map to use
-        self.image = None           # PIL Image generated using fitted_values
+        self.interpolation_method = None  # What type of interpolation method to use
+        self.set_interpolation_method(interpolation_method)  # Sets local value, checks validity
+
+        self.fitted_values = None  # 2D numpy array: values in full grid after fitting a surface
+
+        self.cmap = plt.get_cmap('cividis')  # color map to use
+        self.image = None  # PIL Image generated using fitted_values
 
         # Create coordinate grid
         self.grid_x, self.grid_y = np.mgrid[
@@ -42,48 +69,62 @@ class ImageGenerator:
                                    self.y_range[0]: self.y_range[1]: self.resolution
                                    ]
 
-    def _check_points_valid(self, points):
+    def update_source_values(self, source_values):
         """
-        Helper function that checks if source / boundary points are in valid ranges, and issues warnings if not
-        @param points: list of tuple (x, y, value) where x,y define location and value is in range [0,1]
-        @return: None
-        """
-        for p in points:
-            if not (self.x_range[0] <= p[0] <= self.x_range[1]):
-                warning_str = f"Value {p[0]} not in range {self.x_range}"
-                warnings.warn(warning_str, UserWarning)
-            if not (self.y_range[0] <= p[1] <= self.y_range[1]):
-                warning_str = f"Value {p[1]} not in range {self.y_range}"
-                warnings.warn(warning_str, UserWarning)
-
-    def _check_values_valid(self, values):
-        """
-        Helper function that checks if values are in valid ranges, and issues warnings if not
-        @param values: list of values expected to be in range [0,1]
-        @return: None
-        """
-        for v in values:
-            if not (0 <= v <= 1):
-                warning_str = f"Value {v} not in range {[0, 1]}"
-                warnings.warn(warning_str, UserWarning)
-
-    def set_source_points(self, source_points):
-        """
-        Set source points (overwrites any existing source points)
-        @param source_points: list of tuple (x, y)
-        @return: None
-        """
-        self._check_points_valid(source_points)
-        self.source_points = source_points
-
-    def set_source_values(self, source_values):
-        """
-        Set source values
+        Update source values
         :param source_values: list of floats, must be in same order as self.source_points
         :return: None
         """
-        self._check_values_valid(source_values)
+        # Check that there are as many values as we already have source points
+        if len(source_values) != len(self.source_points):
+            raise ValueError(f"There were {len(source_values)} source values provided but there are " +
+                             f"{len(self.source_points)}, these numbers must match")
+
         self.source_values = source_values
+
+    def set_source_points_and_values(self, source_points, source_values):
+        """
+        Set new source points and values, while also performing some checks and fixing issues where possible
+        :param source_points: list of (x, y) tuples
+        :param source_values: list of float values
+        :return: None
+        """
+
+        # Create copies to avoid changing original objects
+        src_points = source_points.copy()
+        src_values = source_values.copy()
+
+        # Check that we have same number of source points and source values
+        if len(src_points) != len(src_values):
+            raise ValueError(f"There are {len(src_points)} source points and {len(src_values)}.  " +
+                             f"There must be the same number of each.")
+
+        # Check that all points are in range, remove the ones that aren't.
+        remove_indices = []
+        for ix, p in enumerate(src_points):
+            if not (self.x_range[0] <= p[0] <= self.x_range[1]) or not (self.y_range[0] <= p[1] <= self.y_range[1]):
+                warning_str = f"Point {p} is outside of the image bounds and will be removed"
+                warnings.warn(warning_str, UserWarning)
+                remove_indices.append(ix)
+        src_points = [pt for idx, pt in enumerate(src_points) if idx not in remove_indices]
+        src_values = [val for idx, val in enumerate(src_values) if idx not in remove_indices]
+
+        # We don't want two values for the same location.  Check that all points are unique, remove any duplicates
+        remove_indices = []
+        for i in range(len(src_points)):
+            for j in range(i + 1, len(src_points)):
+                # Check if two points identical
+                if (src_points[i][0] == src_points[j][0]) & (src_points[i][1] == src_points[j][1]):
+                    warning_str = f"Found more than one value for point at {src_points[i]}. This can lead to " + \
+                                  f"problems when interpolating, and only the first value will be kept."
+                    warnings.warn(warning_str, UserWarning)
+                    remove_indices.append(j)
+        src_points = [pt for idx, pt in enumerate(src_points) if idx not in remove_indices]
+        src_values = [val for idx, val in enumerate(src_values) if idx not in remove_indices]
+
+        # Finally, store locally
+        self.source_points = src_points
+        self.source_values = src_values
 
     def set_boundary_points(self, boundary_points):
         """
@@ -91,7 +132,6 @@ class ImageGenerator:
         @param boundary_points: list of tuple (x, y)
         @return: None
         """
-        self._check_points_valid(boundary_points)
         self.boundary_points = boundary_points
 
     def set_boundary_values(self, boundary_values):
@@ -100,63 +140,97 @@ class ImageGenerator:
         :param boundary_values: list of floats, must be in same order as self.boundary_points
         :return: None
         """
-        self._check_values_valid(boundary_values)
         self.boundary_values = boundary_values
+
+    def set_interpolation_method(self, interpolation_method):
+        """
+        Set interpolation method - two types supported
+        :param interpolation_method: Must be 'griddata' or 'RBFInterpolator'
+        :return: None
+        """
+        if interpolation_method not in valid_interpolation_methods():
+            warnings.warn(f"'{interpolation_method}' is not supported as an interpolation method.  \n" +
+                          f"Options are: {valid_interpolation_methods()}. \n" +
+                          f"Setting to {InterpolationMethod.rbf_interpolator} for now.")
+            self.interpolation_method = InterpolationMethod.rbf_interpolator
+
+        # If we reach this point, interpolation_method is supported
+        self.interpolation_method = interpolation_method
 
     def generate_boundary_points(self):
         """ Generate synthetic points along boundary of image """
+        if not self.include_boundary_points:
+            self.boundary_points = []
+            self.boundary_values = []
+            return
+
+        # We only reach this point if self.include_boundary_points is True
+
+        # First, create all points
         boundary_points = []
         boundary_x = np.linspace(self.x_range[0], self.x_range[1], num=self.points_per_boundary)
         boundary_y = np.linspace(self.y_range[0], self.y_range[1], num=self.points_per_boundary)
-
         # Add top and bottom edges
         for x in boundary_x:
-            boundary_points.append([x, boundary_y[0]])
-            boundary_points.append([x, boundary_y[-1]])
+            boundary_points.append((x, boundary_y[0]))
+            boundary_points.append((x, boundary_y[-1]))
         # Add left and right edges
         for y in boundary_y:
-            boundary_points.append([boundary_x[0], y])
-            boundary_points.append([boundary_x[-1], y])
-
+            boundary_points.append((boundary_x[0], y))
+            boundary_points.append((boundary_x[-1], y))
         self.boundary_points = boundary_points
 
-    def generate_boundary_values(self):
-        """
-        Generate values of boundary points using current values of source points.
-        For now, the method for choosing boundary values is simply to use value of nearest source point.
-        """
-        if len(self.boundary_points) == 0:
-            raise BaseException("Cannote generate boundary values when there are no boundary points")
-        if len(self.source_values) == 0:
-            raise BaseException("Cannot generate boundary values when there are no source values")
-
-        # Determine value of each point using nearest source point
+        # Second, create all values of boundary points -- using value of nearest source point for each
         source_xy = [[p[0], p[1]] for p in self.source_points]
         boundary_x = [p[0] for p in self.boundary_points]
         boundary_y = [p[1] for p in self.boundary_points]
-        self.boundary_values = griddata(source_xy, self.source_values,
-                                        (boundary_x, boundary_y),
-                                        method='nearest').ravel()
+        self.boundary_values = list(griddata(source_xy, np.array(self.source_values),
+                                             (boundary_x, boundary_y),
+                                             method='nearest').ravel())
 
     def set_color_map(self, cmap):
         """ Set the color map """
         self.cmap = cmap
 
-    def generate_fitted_values(self, include_boundary_points=True):
-        """ Generate values for entire grid using source and boundary points """
+    def generate_fitted_values(self, include_boundary_points=None):
+        """ Generate values for entire grid using source and optionally boundary points """
+
         if len(self.source_points) == 0:
             raise BaseException("Cannot generate fitted values if there are no source points")
         all_points = self.source_points
         all_values = self.source_values
 
-        # If we want to include boundary points
-        if include_boundary_points:
-            self.generate_boundary_values()
-            all_points = np.append(all_points, self.boundary_points, axis=0)
-            all_values = np.append(all_values, self.boundary_values)
+        # Change only if optional argument supplied, otherwise use previously set value
+        if include_boundary_points is not None:
+            self.include_boundary_points = include_boundary_points
 
-        # Finally generate fitted values
-        self.fitted_values = griddata(all_points, all_values, (self.grid_x, self.grid_y), method='cubic')
+        # Call this regardless, if we don't want boundary points it generates an empty list
+        self.generate_boundary_points()
+
+        # If we want to include boundary points include these in the interpolation
+        if self.include_boundary_points:
+            all_points = all_points + self.boundary_points  # np.append(all_points, self.boundary_points, axis=0)
+            all_values = all_values + self.boundary_values  # np.append(all_values, self.boundary_values)
+
+        # Generate fitted values using preferred interpolation method
+        if self.interpolation_method == 'griddata':
+            all_points_np = np.array(all_points)
+            all_values_np = np.array(all_values)
+            # TODO: Could allow for custom arguments to griddata in the future
+            self.fitted_values = griddata(all_points_np, all_values_np, (self.grid_x, self.grid_y), method='cubic')
+
+        elif self.interpolation_method == 'RBFInterpolator':
+            # Create interpolator.  TODO: Could allow for custom arguments to RBFInterpolator in the future.
+            interpolator = RBFInterpolator(all_points, all_values, kernel='linear')
+
+            # Create a mesh grid for points in our image, and determine the value for each using the interpolator
+            grid = np.mgrid[
+                   self.x_range[0]: self.x_range[1]: self.resolution,
+                   self.y_range[0]: self.y_range[1]: self.resolution
+                   ]
+            grid_flat = grid.reshape(2, -1).T
+            fitted_values_flat = interpolator(grid_flat)
+            self.fitted_values = fitted_values_flat.reshape(self.grid_x.shape[0], self.grid_x.shape[1])
 
     def get_fitted_values(self, refit=False):
         """
@@ -189,20 +263,35 @@ class ImageGenerator:
 
         return fitted_point_values
 
-    def generate_image(self, include_boundary_points=True, flip_y=True, refit=False):
+    def generate_image(self, include_boundary_points=False, flip_y=True, refit=False, interpolation_method=None):
         """
         Generate an image using existing class data and settings
-        @param include_boundary_points: bool (default True), whether to include boundary points
+        @param include_boundary_points: bool (default False), whether to include boundary points
         @param flip_y: bool (default True), whether to flip image across y-axis
         @param refit: bool (default False), whether to force refitting of values
+        @param interpolation_method: InterpolationMethod (default None), can optionally be set / changed here
         @return: None
         """
         if len(self.source_points) == 0 or len(self.source_values) == 0:
             raise BaseException("Cannot generate image when there are no source points or no source values")
 
+        # If include_boundary_points has changed, force refit
+        if self.include_boundary_points != include_boundary_points:
+            self.include_boundary_points = include_boundary_points
+            refit = True
+
+        # Reset interpolation method if this is different from previously used method
+        if interpolation_method is not None:
+            current_method = self.interpolation_method
+            self.set_interpolation_method(interpolation_method)
+
+            # If interpolation method has changed, force a refit of interpolation
+            if self.interpolation_method != current_method:
+                refit = True
+
         # Ensure we have fitted values
         if refit or (self.fitted_values is None):
-            self.generate_fitted_values(include_boundary_points=include_boundary_points)
+            self.generate_fitted_values()
 
         grid_z_values = copy.copy(self.fitted_values)
 
@@ -217,7 +306,7 @@ class ImageGenerator:
         if flip_y:
             grid_z_values = np.flip(grid_z_values, 0)
 
-        self.image = Image.fromarray(grid_z_values)
+        self.image = Image.fromarray(grid_z_values).convert("RGB")
 
     def save_image(self, save_path):
         """ Save the image at specified path """
@@ -247,7 +336,6 @@ def generate_image_sequence(data,
     :param filename_format: string indicating filename format, either 'timestamp', or 'datetime'
     :return: None
     """
-
     # Set intervals that we should loop over
     if time_window is None:
         timestamps = data.index
@@ -262,7 +350,7 @@ def generate_image_sequence(data,
     loop_ix = 1
     for curr_time in timestamps:
         # Get this interval's values
-        image_gen.set_source_values(np.array(data.loc[curr_time].values))
+        image_gen.update_source_values(list(data.loc[curr_time].values))
 
         # Generate image
         image_gen.generate_image(refit=True)
@@ -288,7 +376,7 @@ def generate_video(source_path, target_path=None, frame_rate=30, output_format='
     :param frame_rate: int indicating framerate, default 30
     :param output_format: string indicating preferred output format.  Currently only mp4 and gif supported.
     """
-    """  """
+    # TODO:  There may well be better video creation tools out there and consider replacing ffmpeg in the future.
     try:
         if output_format == 'mp4':
             if target_path is None:
