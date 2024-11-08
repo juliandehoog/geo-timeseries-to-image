@@ -10,15 +10,17 @@ Example of such datasets could include:
 - temperature measurements at different weather stations, or
 - solar power generation at different homes having rooftop solar PV
 
-This package uses `scipy.interpolate.griddata` to interpolate between individual
-point sources (such as weather stations).  It also provides an ability to add
-boundary points, which means that values can be estimated for entire rectangular
-regions, even with only a small number of time series data sources.
+This package uses existing interpolation packages to interpolate between individual
+point sources in 2D space (such as weather stations).  Currently supported:
+-  `scipy.interpolate.griddata`
+-  `scipy.interpolate.RBFInterpolator`   
+
+It also provides an ability to add boundary points, which means that values can be estimated for 
+entire rectangular regions, even with only a small number of time series data sources within the region.
 
 The 2D data that is generated from interpolation can either be accessed as a 2D numpy array
 of float values, or it can be displayed as a visual image.  There is basic support to
-generate a sequence of images from time series data, and convert these into a video
-(using command line tool `ffmpeg`).
+generate a sequence of images from time series data.
 
 ---
 
@@ -39,10 +41,10 @@ make local-install
 ## Description
 
 The core functionality is provided within the `ImageGenerator` class.  When creating 
-an instance of ImageGenerator, you must pass the *range of x and y values* (max, min for each)
-that you are interested in, as well as the *resolution* of the "image" (the discretisation interval).
+an instance of ImageGenerator, you must pass the range of x and y values (max, min for each)
+that you are interested in, as well as the resolution of the image (the spatial discretisation interval).
 
-You must also pass the *coordinates of the source points*, in other words the locations where
+You must also pass the coordinates of the source points, in other words the locations where
 the time series data is being generated.  To use the example of weather stations, this would be
 the longitude / latitude of each weather station.
 
@@ -57,7 +59,7 @@ In short:
 
 - [x_min, x_max], [y_min, y_max], defining a region of interest
 - target resolution of region of interest (spatial discretisation)
-- (x, y) coordinates for a set of points that generate data within the region
+- (x, y) coordinates for all points that generate data within the region
 - values at each of these points for one or more intervals
 
 **Output**:
@@ -101,6 +103,7 @@ faulty sensors or unique characteristics. However, for other types of time serie
 
 ## Release History
 
+- **0.2.0** - Added RBFInterpolator support, multiple small improvements to structure
 - **0.1.3** - Fixed minor issue with nans at edge of fitted values
 - **0.1.2** - Fixed makefile, setup, etc. for deployment to pypi
 - **0.1.1** - Multiple minor fixed, improved README, thanks to [Peter Ilfrich](https://github.com/ilfrich) 
