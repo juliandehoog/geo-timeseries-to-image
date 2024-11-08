@@ -290,6 +290,7 @@ class ImageGenerator:
 
         # Ensure we have fitted values
         if refit or (self.fitted_values is None):
+            self.generate_boundary_points()
             self.generate_fitted_values()
 
         grid_z_values = copy.copy(self.fitted_values)
