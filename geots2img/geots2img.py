@@ -60,14 +60,15 @@ class ImageGenerator:
         else:
             self.source_values = []
 
-        # Whether to artificially generate boundary points to ensure full region is interpolated.
-        # Default False, can also be set to True later when generating fitted points or image.
-        self.include_boundary_points = include_boundary_points
-
         # Below are only relevant if boundary points do get generated
         self.num_points_per_boundary = num_points_per_boundary  # How many points should be generated at each boundary
         self.boundary_points = []  # list of tuples (x, y) for boundary points
         self.boundary_values = []  # list of values at boundary points (must be in same order)
+
+        # Whether to artificially generate boundary points to ensure full region is interpolated.
+        # Default False, can also be set to True later when generating fitted points or image.
+        self.include_boundary_points = include_boundary_points
+        self.generate_boundary_points()
 
         self.interpolation_method = None  # What type of interpolation method to use
         self.set_interpolation_method(interpolation_method)  # Sets local value, checks validity
@@ -159,8 +160,8 @@ class ImageGenerator:
 
         # First, create all points
         boundary_points = []
-        boundary_x = np.linspace(self.x_range[0], self.x_range[1], num=self.points_per_boundary)
-        boundary_y = np.linspace(self.y_range[0], self.y_range[1], num=self.points_per_boundary)
+        boundary_x = np.linspace(self.x_range[0], self.x_range[1], num=self.num_points_per_boundary)
+        boundary_y = np.linspace(self.y_range[0], self.y_range[1], num=self.num_points_per_boundary)
         # Add top and bottom edges
         for x in boundary_x:
             boundary_points.append((x, boundary_y[0]))
@@ -198,9 +199,7 @@ class ImageGenerator:
         # Change only if optional argument supplied, otherwise use previously set value
         if include_boundary_points is not None:
             self.include_boundary_points = include_boundary_points
-
-        # Call this regardless, if we don't want boundary points it generates an empty list
-        self.generate_boundary_points()
+            self.generate_boundary_points()
 
         # Ensure we include boundary points in interpolation (lists will be empty if we don't want to)
         all_points = all_points + self.boundary_points
@@ -215,8 +214,9 @@ class ImageGenerator:
         if self.interpolation_method == 'griddata':
             all_points_np = np.array(all_points)
             all_values_np = np.array(all_values)
+
             # TODO: Could allow for custom arguments to griddata in the future
-            self.fitted_values = griddata(all_points_np, all_values_np, mesh_grid, method='cubic')
+            self.fitted_values = griddata(all_points_np, all_values_np, tuple(mesh_grid), method='cubic')
 
         elif self.interpolation_method == 'RBFInterpolator':
             # Create interpolator.  TODO: Could allow for custom arguments to RBFInterpolator in the future.
