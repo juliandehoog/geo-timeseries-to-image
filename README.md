@@ -103,6 +103,7 @@ faulty sensors or unique characteristics. However, for other types of time serie
 
 ## Release History
 
+- **0.2.1** - Type hints and other small code improvements
 - **0.2.0** - Added RBFInterpolator support, multiple small improvements to structure
 - **0.1.3** - Fixed minor issue with nans at edge of fitted values
 - **0.1.2** - Fixed makefile, setup, etc. for deployment to pypi

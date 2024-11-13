@@ -1,5 +1,7 @@
 import warnings
+import inspect
 import copy
+import pandas as pd
 import numpy as np
 import os
 from scipy.interpolate import griddata, RBFInterpolator
@@ -12,13 +14,20 @@ from typing import Tuple, Optional, List
 
 class InterpolationMethod:
     """ Utility class to define possible interpolation methods """
-    griddata = "griddata"
-    rbf_interpolator = "RBFInterpolator"
+    GRIDDATA = "griddata"
+    RBF_INTERPOLATOR = "RBFInterpolator"
 
+    @staticmethod
+    def get_all():
+        """ Returns list of strings of all attributes """
+        provided_class = InterpolationMethod().__class__
+        attributes = inspect.getmembers(provided_class, lambda a: not (inspect.isroutine(a)))
+        return [a[0] for a in attributes if not (a[0].startswith('__') and a[0].endswith('__'))]
 
-def valid_interpolation_methods():
-    """ Utility function that returns a list of supported interpolation methods """
-    return [InterpolationMethod.griddata, InterpolationMethod.rbf_interpolator]
+    @staticmethod
+    def get_all_values() -> List[str]:
+        """ Returns list of strings that are values of all attributes """
+        return list(map(lambda x: getattr(InterpolationMethod(), x), InterpolationMethod().get_all()))
 
 
 class ImageGenerator:
@@ -32,7 +41,7 @@ class ImageGenerator:
                  source_values: Optional[List[float]] = None,
                  include_boundary_points: bool = False,
                  num_points_per_boundary: int = 5,
-                 interpolation_method: InterpolationMethod = 'RBFInterpolator',
+                 interpolation_method: str = InterpolationMethod.RBF_INTERPOLATOR,
                  ) -> None:
         """
         :param x_range: tuple or 2D array of [float, float] indicating min, max of x range
@@ -73,7 +82,7 @@ class ImageGenerator:
         self.interpolation_method = None  # What type of interpolation method to use
         self.set_interpolation_method(interpolation_method)  # Sets local value, checks validity
 
-        self.fitted_values = None  # 2D numpy array: values in full grid after fitting a surface
+        self.fitted_values = None  # 2D numpy array: values in full grid after interpolation
 
         self.cmap = plt.get_cmap('cividis')  # color map to use
         self.image = None  # PIL Image generated using fitted_values
@@ -134,17 +143,18 @@ class ImageGenerator:
         """
         self.boundary_points = boundary_points
 
-    def set_interpolation_method(self, interpolation_method: InterpolationMethod) -> None:
+    def set_interpolation_method(self, interpolation_method: str) -> None:
         """
         Set interpolation method
         :param interpolation_method: Currently supports 'griddata' or 'RBFInterpolator'
         :return: None
         """
-        if interpolation_method not in valid_interpolation_methods():
+        if interpolation_method not in InterpolationMethod.get_all_values():
             warnings.warn(f"'{interpolation_method}' is not supported as an interpolation method.  \n" +
-                          f"Options are: {valid_interpolation_methods()}. \n" +
-                          f"Setting to {InterpolationMethod.rbf_interpolator} for now.")
-            self.interpolation_method = InterpolationMethod.rbf_interpolator
+                          f"Options are: {InterpolationMethod.get_all_values()}. \n" +
+                          f"Setting to {InterpolationMethod.RBF_INTERPOLATOR} for now.")
+            self.interpolation_method = InterpolationMethod.RBF_INTERPOLATOR
+            return
 
         # If we reach this point, interpolation_method is supported
         self.interpolation_method = interpolation_method
@@ -188,7 +198,7 @@ class ImageGenerator:
         """
         Generate values for entire grid using source and optionally boundary points
         :param include_boundary_points: option to set / reset whether to include boundary points
-        :return: None
+        :return: fitted_values, 2D numpy array of values in full grid after interpolation
         """
 
         if len(self.source_points) == 0:
@@ -211,19 +221,25 @@ class ImageGenerator:
         ]
 
         # Generate fitted values using preferred interpolation method
-        if self.interpolation_method == 'griddata':
+        if self.interpolation_method == InterpolationMethod.GRIDDATA:
             all_points_np = np.array(all_points)
             all_values_np = np.array(all_values)
 
             # TODO: Could allow for custom arguments to griddata in the future
             self.fitted_values = griddata(all_points_np, all_values_np, tuple(mesh_grid), method='cubic')
 
-        elif self.interpolation_method == 'RBFInterpolator':
+        elif self.interpolation_method == InterpolationMethod.RBF_INTERPOLATOR:
             # Create interpolator.  TODO: Could allow for custom arguments to RBFInterpolator in the future.
             interpolator = RBFInterpolator(all_points, all_values, kernel='linear')
             mesh_grid_flat = mesh_grid.reshape(2, -1).T
             fitted_values_flat = interpolator(mesh_grid_flat)
             self.fitted_values = fitted_values_flat.reshape(mesh_grid.shape[1], mesh_grid.shape[2])
+
+        else:
+            raise ValueError(f"Could not interpolate:  {self.interpolation_method} is not supported.  Please set "
+                             f"another interpolation method.  Options are: {InterpolationMethod.get_all_values()}.")
+
+        return self.fitted_values
 
     def get_fitted_values(self, refit: bool = False):
         """
@@ -264,7 +280,7 @@ class ImageGenerator:
                        include_boundary_points: bool = False,
                        flip_y: bool = True,
                        refit: bool = False,
-                       interpolation_method: Optional[InterpolationMethod] = None
+                       interpolation_method: Optional[str] = None
                        ) -> Image:
         """
         Generate an image using existing class data and settings
@@ -324,11 +340,11 @@ class ImageGenerator:
         self.image.convert('RGB').save(save_path)
 
 
-def generate_image_sequence(data,
-                            image_gen,
-                            time_window=None,
-                            save_path=None,
-                            filename_format='numerical'):
+def generate_image_sequence(data: pd.DataFrame,
+                            image_gen: ImageGenerator,
+                            time_window: Tuple[pd.Timestamp, pd.Timestamp] = None,
+                            save_path: str = None,
+                            filename_format: str = 'numerical'):
     """
     Generate a sequence of images using an image generator for a given dataset
     :param data: pandas dataframe having timestamps as index, and one column per time series
@@ -370,7 +386,11 @@ def generate_image_sequence(data,
         loop_ix += 1
 
 
-def generate_video(source_path, target_path=None, frame_rate=30, output_format='mp4'):
+def generate_video(
+        source_path: str,
+        target_path: str = None,
+        frame_rate: int = 30,
+        output_format: str = 'mp4'):
     """
     Simple python wrapper for command line ffmpeg tool to generate a video of existing image sequence
     :param source_path: Where to find image sequence files (must have 8-digit numbered filenames, e.g. 00000001.jpg)

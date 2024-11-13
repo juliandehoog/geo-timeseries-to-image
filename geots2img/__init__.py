@@ -1,2 +1,2 @@
-from geots2img.geots2img import ImageGenerator, generate_image_sequence, generate_video
+from geots2img.geots2img import ImageGenerator, InterpolationMethod, generate_image_sequence, generate_video
 
